@@ -26,6 +26,16 @@ childLens n = lens (\t -> (_entries t) !! n) -- get
                    (\child node -> node {_entries = (updateList (_entries node) child n)}) -- set
 
 
+--TODO - there should be an idiom for this stuff, figure out if time (there wont be time)
+calcValues :: HTree -> (Rect, Int)
+calcValues (Node entries rect lhv) = (newMBR, newLHV)
+  where
+    newMBR = Rect ((_left   . _rect) (minimumBy (comparing (_left   . _rect)) entries)) 
+                  ((_top    . _rect) (minimumBy (comparing (_top    . _rect)) entries))
+                  ((_right  . _rect) (maximumBy (comparing (_right  . _rect)) entries))
+                  ((_bottom . _rect) (maximumBy (comparing (_bottom . _rect)) entries))
+    newLHV = _lhv $ maximumBy (comparing _lhv) entries
+
 -- get all children of a Ptr as [Ptr]s. This breaks the abtraction - in an
 -- actual Ptr library it might be better to hide Ptr internals and pass in 
 -- a function to do this.
@@ -38,7 +48,7 @@ getChildren p@(Ptr list lens) root =
 --incl provided sibling
 getSiblings :: Ptr HTree -> HTree -> [Ptr HTree]
 getSiblings ptr root
-  | not $ isRoot ptr = error "Root must actually be root"
+  -- | not $ isRoot root = error "Root must actually be root"
   | isRoot ptr = [ptr] -- need to special case since you can't get parent of root
   | otherwise = getChildren (parent ptr) root
 
@@ -101,12 +111,18 @@ chooseLeaf' n@(Node children _ _) hValue ptr
               else minimumBy (comparing _lhv) potentialChildren
     index = fromJust $ findIndex (== child) children
 
+-- Core functionality. Inserts provided rect into provided Hilbert Tree,
+-- returning a new tree.
 insertRect :: HTree -> Rect -> HTree
 insertRect root rect 
+  | trace ("insertRect: " ++ show chosenLeaf ++ show rect) False = undefined
   | full $ deref root chosenLeaf =
       let (newNode, newRoot) = handleOverflow chosenLeaf rect root in
         adjustTree chosenLeaf (Just $ getSiblings chosenLeaf root) newNode newRoot
-  | otherwise = addToNode chosenLeaf root (Node [] rect (hilbertValue rect))
+  | otherwise = 
+    let newRoot = addToNode chosenLeaf root (Node [] rect (hilbertValue rect)) in
+      adjustTree chosenLeaf Nothing Nothing newRoot
+
   where
     chosenLeaf = chooseLeaf root rect
 
@@ -119,18 +135,20 @@ distributeEntriesToNodes grps sibs root
     newRoot = setNode (head sibs) root (head grps)
 
 handleOverflow :: Ptr HTree -> Rect -> HTree -> (Maybe HTree, HTree)
-handleOverflow node rect root =
+handleOverflow node rect root
+  | trace ("handleOverflow: " ++ show allFull) False = undefined
+  | otherwise = 
     if allFull
       then let updatedRoot = distributeEntriesToNodes (tail entryGroups) (getSiblings node root) root
-               --TODO actual bounding thing for group
-               splitNode   = Node (head entryGroups) (Rect 9 9 9 9) (hilbertValue rect) in
+               (newMBR, newLHV) = calcValues (Node (head entryGroups) undefined undefined)
+               splitNode   = Node (head entryGroups) newMBR newLHV in
                  (Just splitNode, updatedRoot)
       else let updatedRoot = distributeEntriesToNodes entryGroups (getSiblings node root) root in
         (Nothing, updatedRoot)
   where
     siblingList = (getSiblings node root)
     newEntry = Node [] rect (hilbertValue rect)
-    entries :: [HTree] = concat $ (map _entries $ (map (deref root) siblingList))
+    entries :: [HTree] = (concat $ (map _entries $ (map (deref root) siblingList))) ++ [newEntry]
     allFull = all full (map (deref root) (getSiblings node root))
     entryGroups :: [[HTree]] = groupsOf ((length siblingList) + (if allFull then 1 else 0)) entries
 
@@ -139,18 +157,17 @@ handleOverflow node rect root =
 --createdNode => split
 adjustTree :: Ptr HTree -> Maybe [Ptr HTree] -> Maybe HTree -> HTree -> HTree
 adjustTree updatedNode siblings createdNode root
-  | trace ("??" ++ show updatedNode) False = undefined
   | otherwise = 
       if isRoot updatedNode
-          then 
-            if isJust createdNode --split root! rejoin into one big root.
-              --todo-real values
-              then Node [root, fromJust createdNode] (Rect 0 0 100 100) 55
-              else root
-          else let (pp, updatedRoot) = propNodeSplit
-                   updatedRoot2 = updateMbrLhv updatedNode root in
-            
-            adjustTree (parent updatedNode) (Just $ getSiblings (parent updatedNode) updatedRoot2) pp updatedRoot2
+        then 
+          if isJust createdNode --split root! rejoin into one big root.
+            then let (newMBR, newLHV) = calcValues (Node [root, fromJust createdNode] undefined undefined) in
+                   Node [root, fromJust createdNode] newMBR newLHV
+            else updateMbrLhv updatedNode root
+        else let (pp, updatedRoot) = propNodeSplit
+                 updatedRoot2 = updateMbrLhv updatedNode root in
+          
+          adjustTree (parent updatedNode) (Just $ getSiblings (parent updatedNode) updatedRoot2) pp updatedRoot2
 
   where
     -- better name might be maybePropNodeSplit...
@@ -169,25 +186,15 @@ adjustTree updatedNode siblings createdNode root
     updateMbrLhv node root = 
         update node root (\(Node entries rect lhv) -> (Node entries newMBR newLHV))
       where
-        children = map (deref root) (getChildren node root)
-        --TODO - there should be an idiom for this stuff, figure out if time (there wont be time)
-        newMBR = Rect ((_left   . _rect) (minimumBy (comparing (_left   . _rect)) children)) 
-                      ((_top    . _rect) (minimumBy (comparing (_top    . _rect)) children))
-                      ((_right  . _rect) (maximumBy (comparing (_right  . _rect)) children))
-                      ((_bottom . _rect) (maximumBy (comparing (_bottom . _rect)) children))
-        newLHV = _lhv $ maximumBy (comparing _lhv) children
-
+        (newMBR, newLHV) = calcValues (deref root node)
 
 main = do
-    print $ 3 `groupsOf` [1, 2, 3]
-    print $ 3 `groupsOf` [1, 2, 3, 4]
-    print $ 3 `groupsOf` [1, 2, 3, 4, 5]
-    print $ 3 `groupsOf` [1, 2, 3, 4, 5, 6]
     print $ "Before"
     print $ tree
     print $ "Add 1"
     print $ (insertRect tree (Rect 0 0 2 2))
     print $ "Add 2"
-    print $ insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)
+    print $ foldl insertRect tree [Rect 0 0 2 1, Rect 0 0 2 2, Rect 0 0 2 3, Rect 0 0 2 4, Rect 0 0 2 5, Rect 0 0 2 6, Rect 0 0 2 7, Rect 0 0 2 8, Rect 0 0 2 9, Rect 0 0 2 10]
+    --print $ insertRect (insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)) (Rect 0 0 3 3)
   where
-    tree = Node [Node [] (Rect 0 0 20 20) 20, Node [] (Rect 20 20 40 40) 45] (Rect 0 0 40 40) 200
+    tree = Node [] (Rect 0 0 0 0) 0
