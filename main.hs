@@ -146,7 +146,7 @@ handleOverflow node rect root
       else let updatedRoot = distributeEntriesToNodes entryGroups (getSiblings node root) root in
         (Nothing, updatedRoot)
   where
-    siblingList = (getSiblings node root)
+    siblingList = getSiblings node root
     newEntry = Node [] rect (hilbertValue rect)
     entries :: [HTree] = (concat $ (map _entries $ (map (deref root) siblingList))) ++ [newEntry]
     allFull = all full (map (deref root) (getSiblings node root))
@@ -157,6 +157,7 @@ handleOverflow node rect root
 --createdNode => split
 adjustTree :: Ptr HTree -> Maybe [Ptr HTree] -> Maybe HTree -> HTree -> HTree
 adjustTree updatedNode siblings createdNode root
+  | trace ("adj" ++ (show updatedNode) ++ "\n" ++ (show root)) False = undefined
   | otherwise = 
       if isRoot updatedNode
         then 
@@ -165,7 +166,7 @@ adjustTree updatedNode siblings createdNode root
                    Node [root, fromJust createdNode] newMBR newLHV
             else updateMbrLhv updatedNode root
         else let (pp, updatedRoot) = propNodeSplit
-                 updatedRoot2 = updateMbrLhv updatedNode root in
+                 updatedRoot2 = updateMbrLhv updatedNode updatedRoot in
           
           adjustTree (parent updatedNode) (Just $ getSiblings (parent updatedNode) updatedRoot2) pp updatedRoot2
 
@@ -175,8 +176,8 @@ adjustTree updatedNode siblings createdNode root
     propNodeSplit = 
       let np = parent updatedNode in
         case createdNode of
-          Just newNode ->
-            if full $ newNode
+          Just newNode -> -- this is NN
+            if full $ (deref root np)
               then handleOverflow np (_rect newNode) root
               else (Nothing, addToNode np root newNode)
           Nothing ->
@@ -194,7 +195,7 @@ main = do
     print $ "Add 1"
     print $ (insertRect tree (Rect 0 0 2 2))
     print $ "Add 2"
-    print $ foldl insertRect tree [Rect 0 0 2 1, Rect 0 0 2 2, Rect 0 0 2 3, Rect 0 0 2 4, Rect 0 0 2 5, Rect 0 0 2 6, Rect 0 0 2 7, Rect 0 0 2 8, Rect 0 0 2 9, Rect 0 0 2 10]
+    print $ foldl insertRect tree [Rect 0 0 2 1, Rect 0 0 2 2, Rect 0 0 2 3, Rect 0 0 2 4, Rect 0 0 2 5, Rect 0 0 2 6, Rect 0 0 2 7]
     --print $ insertRect (insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)) (Rect 0 0 3 3)
   where
     tree = Node [] (Rect 0 0 0 0) 0
