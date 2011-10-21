@@ -10,6 +10,9 @@ import Prelude hiding ((.))
 
 data Ptr a = Ptr [Int] (Int -> Lens a a)
 
+instance Show (Ptr a) where
+  show (Ptr list lens) = "Ptr: " ++ show list
+
 newPtr :: (Int -> Lens a a) -> Ptr a
 newPtr lens = (Ptr [] lens)
 
