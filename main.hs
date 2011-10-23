@@ -11,6 +11,7 @@ import Control.Monad
 import Control.Category
 import Prelude hiding ((.))
 import System.Environment
+import System.TimeIt
 
 import Rect
 import Ptr
@@ -250,18 +251,20 @@ countEntries t
   | isLeaf t = length (_entries t)
   | otherwise = foldl1 (+) (map countEntries (_entries t))
 
+limit :: Int
+limit = 4
 
 processInput :: HTree -> IO ()
 processInput hTree = do
   line <- getLine
-  putStrLn $ show (search (toRect ((map read (splitOn "," line)) :: [Int])) hTree )
+  timeIt $ putStrLn $ show (take limit $ search (toRect ((map read (splitOn "," line)) :: [Int])) hTree )
 
   processInput hTree
 
 main = do
     fileName <- getFileOrFail
-    contents <- fmap lines $ readFile fileName
-    let rects = toRects contents
+    putStrLn $ "Loading " ++ fileName ++ "..."
+    rects <- timeIt $ fmap (toRects . lines) $ readFile fileName
 
     let hTree = foldl insertRect tree rects
 
