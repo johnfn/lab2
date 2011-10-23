@@ -45,7 +45,7 @@ largestValue = 10000
 
 instance Arbitrary HTree where
   arbitrary = do
-    maxDepth <- choose (1, 8)
+    maxDepth <- choose (0, 0)
     t <- arbitraryTree maxDepth (Rect 0 0 largestValue largestValue) largestValue
     return t
 -- This is where you start to see Haskell's sex appeal
@@ -71,6 +71,7 @@ childLens n
 
 
 createNodeFrom :: [HTree] -> HTree
+createNodeFrom [] = (Node [] (Rect 0 0 0 0) 0)
 createNodeFrom entries = Node entries newMBR newLHV
   where
     newMBR = Rect ((_left   . _rect) (minimumBy (comparing (_left   . _rect)) entries)) 
@@ -129,7 +130,7 @@ addToNode leaf root addition
 
 setNode :: Ptr HTree -> HTree -> [HTree] -> HTree
 setNode leaf root newContents 
-  | otherwise = update leaf root (\node -> node {_entries = newContents})
+  | otherwise = update leaf root (\node -> createNodeFrom newContents)
 
 {-
 search :: HTree -> [Rect]
@@ -195,7 +196,7 @@ adjustTree :: Ptr HTree -> Maybe HTree -> HTree -> HTree
 adjustTree updatedNode createdNode root
     | isRoot updatedNode =
         case createdNode of
-          Just newNode -> createNodeFrom [root, newNode]
+          Just newNode -> createNodeFrom [updateMbrLhv updatedNode root, newNode]
           Nothing -> updateMbrLhv updatedNode root
     | otherwise = 
         let updatedRoot = updateMbrLhv updatedNode root
@@ -216,11 +217,7 @@ adjustTree updatedNode createdNode root
 
     updateMbrLhv :: Ptr HTree -> HTree -> HTree
     updateMbrLhv node uroot =
-        update node uroot (\(Node entries rect lhv) -> (Node entries newMBR newLHV))
-      where
-        (Node _ newMBR newLHV) = createNodeFrom (map (deref uroot) (getChildren node uroot))
-
-
+        update node uroot (\(Node entries rect lhv) -> createNodeFrom entries)
 
 ensureChildren :: HTree -> HTree
 ensureChildren t@(Node entries _ _) = if (null entries) then (Node [t] (Rect 0 0 5 5) 99) else t
@@ -230,16 +227,27 @@ checkCVValidity r =
   case r of ((Rect a b c d), _) -> (a <= c) && (b <= d)
 
 main = do
+
     --quickCheck( (\r -> checkCVValidity $ (calcValues (ensureChildren r))) :: HTree -> Bool)
     --quickCheck( (\r -> let withChildren = ensureChildren r in
                          --(length (getChildren (newPtr childLens) withChildren) > 0)) :: HTree -> Bool)
+     
+    print $ foldl insertRect tree (map (Rect 0 0 2) [1..100])
 
-    quickCheck( (\r1 r2 -> (insertRect (insertRect tree r1) r2) ==
-                           (insertRect (insertRect tree r2) r1)) :: Rect -> Rect -> Bool)
+    {-
+    quickCheck( (\r1 r2 -> (_lhv $ insertRect (insertRect tree r1) r2) ==
+                           (_lhv $ insertRect (insertRect tree r2) r1)) :: Rect -> Rect -> Bool)
+    -}
+
+    --quickCheck ( (\r -> (_rect $ createNodeFrom r) == (_rect $ createNodeFrom (reverse r))) :: [HTree] -> Bool)
+
+    {-
+    quickCheck( (\r -> (_rect $ foldl insertRect tree r) ==
+                       (_rect $ foldl insertRect tree (reverse r))) :: [Rect] -> Bool)
+                       -}
 
 
     --getChildren :: Ptr HTree -> HTree -> [Ptr HTree]
-    print $ foldl insertRect tree (map (Rect 0 0 2) [1..100])
     --print $ insertRect (insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)) (Rect 0 0 3 3)
   where
-    tree = Node [] (Rect 0 0 0 0) 0
+    tree = Node [] (Rect 0 0 0 0) 100
