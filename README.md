@@ -12,7 +12,6 @@ Grant Mathews
 
 The implementation creates a proper Hilbert Tree with insertRect. It has the following deviations from the spec at this point:
 
-* Not using correct Hilbert Values. Easy fix since I already have code to generate them.
 * Need to do timing.
 
 ## TODO
