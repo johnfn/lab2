@@ -1,5 +1,6 @@
 module Ptr where
 
+import Debug.Trace
 import Data.Lens.Common
 import Control.Category
 import Prelude hiding ((.))
@@ -33,7 +34,7 @@ update (Ptr list lensFn) root fn
     | otherwise  = (accessor ^= (fn oldContent)) root
   where
     -- compose a list of lenses to the cursor
-    lenses = map lensFn list
+    lenses = map lensFn (reverse list)
     accessor = foldl1 (.) lenses
     oldContent = root ^. accessor
 
@@ -42,5 +43,5 @@ deref root (Ptr list lensFn)
     | list == [] = root
     | otherwise  = root ^. accessor
   where
-    lenses = map lensFn list
+    lenses = map lensFn (reverse list)
     accessor = foldl1 (.) lenses

@@ -1,30 +1,79 @@
+{-# OPTIONS -Wall #-}
+
 import Rect
 import Data.Maybe
 import Data.Ord
 import Debug.Trace
 import Data.Lens.Common
+import Test.QuickCheck
+import Control.Monad
 import Control.Category
 import Prelude hiding ((.))
 import Data.List
 import Rect
 import Ptr
 
+{-
+updateMbrLhv :: Ptr HTree -> HTree -> HTree
+updateMbrLhv node uroot 
+  | otherwise = 
+      update node uroot (\(Node entries rect lhv) -> (Node entries newMBR newLHV))
+  where
+    (newMBR, newLHV) = calcValues (deref uroot node)
+-}
+
 data HTree = Node { _entries :: [HTree]
                   , _rect    :: Rect
                   , _lhv     :: Int
                   } deriving (Eq)
 
+arbitraryTree :: Int -> Rect -> Int -> Gen HTree
+arbitraryTree maxDepth (Rect v1 v2 v3 v4) biggestVal = do
+    rect <- do
+      n1 <- choose (0, v1)
+      n2 <- choose (0, v2)
+      n3 <- choose (n1, v3)
+      n4 <- choose (n2, v4)
+      return (Rect n1 n2 n3 n4)
+
+    lhv <- choose (0, biggestVal)
+
+    if maxDepth == 0
+      then return (Node [] rect lhv)
+      else do 
+        t <- oneof [ liftM3 Node (resize 3 $ listOf $ arbitraryTree depth' rect lhv) arbitrary arbitrary]
+        return t
+  where
+    depth' = maxDepth - 1
+
+largestValue :: Int
+largestValue = 10000
+
+instance Arbitrary HTree where
+  arbitrary = do
+    maxDepth <- choose (1, 8)
+    t <- arbitraryTree maxDepth (Rect 0 0 largestValue largestValue) largestValue
+    return t
 -- This is where you start to see Haskell's sex appeal
-showHTree indent (Node ch mbr lhv) = 
+showHTree indent (Node ch mbr lhv) =
   (concat $ replicate indent "  ") ++ "lhv: " ++ (show lhv) ++ " rect: " ++ (show mbr) ++ "\n" ++ (concat $ map (showHTree (indent + 2)) ch)
 
 instance Show HTree where
   show n = showHTree 0 n
 
--- lens for a single child of a Node
-childLens n = lens (\t -> (_entries t) !! n) -- get
-                   (\child node -> node {_entries = (updateList (_entries node) child n)}) -- set
+at list val = 
+  if val >= (length list)  || val < 0
+    then error $ ("AT FAIL AT " ++ show list ++ show val)
+    else list !! val
 
+-- lens for a single child of a Node
+childLens n 
+  | otherwise = 
+    lens (\t -> (_entries t) `at` n) -- get
+                     (\child node -> node {_entries = (updateList (_entries node) child n)}) -- set
+
+
+--TODO: Better is createNodeFrom that takes a list of HTree children.
 
 --TODO - there should be an idiom for this stuff, figure out if time (there wont be time)
 calcValues :: HTree -> (Rect, Int)
@@ -56,9 +105,10 @@ full :: HTree -> Bool
 full (Node entries _ _) = (length entries) >= 3
 
 -- Updates an index to new a new value in a list.
-updateList :: [a] -> a -> Int -> [a]
-updateList list val pos =
-    first ++ [val] ++ rest
+updateList :: Show a => [a] -> a -> Int -> [a]
+updateList list val pos 
+  | otherwise = 
+      first ++ [val] ++ rest
   where
     (first, oldVal:rest) = splitAt pos list
 
@@ -79,11 +129,13 @@ hilbertValue r = 5
 
 --add rect to leaf, returning new tree
 addToNode :: Ptr HTree -> HTree -> HTree -> HTree
-addToNode leaf root addition = 
-  update leaf root (\(Node oldEntries _ _) -> (deref root leaf) {_entries = oldEntries ++ [addition]})
+addToNode leaf root addition 
+  | otherwise = 
+      update leaf root (\(Node oldEntries _ _) -> (deref root leaf) {_entries = oldEntries ++ [addition]})
 
 setNode :: Ptr HTree -> HTree -> [HTree] -> HTree
-setNode leaf root newContents = update leaf root (\node -> node {_entries = newContents})
+setNode leaf root newContents 
+  | otherwise = update leaf root (\node -> node {_entries = newContents})
 
 {-
 search :: HTree -> [Rect]
@@ -105,7 +157,7 @@ chooseLeaf' n@(Node children _ _) hValue ptr
   | isLeaf n = ptr
   | otherwise = chooseLeaf' child hValue (getChild index ptr)
   where
-    potentialChildren = (filter (\child -> (_lhv child) > hValue) children)
+    potentialChildren = (filter (\ch -> (_lhv ch) > hValue) children)
     child = if null potentialChildren
               then maximumBy (comparing _lhv) children
               else minimumBy (comparing _lhv) potentialChildren
@@ -115,60 +167,52 @@ chooseLeaf' n@(Node children _ _) hValue ptr
 -- returning a new tree.
 insertRect :: HTree -> Rect -> HTree
 insertRect root rect 
-  | trace ("insertRect: " ++ show chosenLeaf ++ show rect) False = undefined
   | full $ deref root chosenLeaf =
-      let (newNode, newRoot) = handleOverflow chosenLeaf rect root in
-        adjustTree chosenLeaf (Just $ getSiblings chosenLeaf root) newNode newRoot
+      let (splitNode, newRoot) = handleOverflow chosenLeaf newNode root in
+        adjustTree chosenLeaf splitNode newRoot
   | otherwise = 
     let newRoot = addToNode chosenLeaf root (Node [] rect (hilbertValue rect)) in
-      adjustTree chosenLeaf Nothing Nothing newRoot
+      adjustTree chosenLeaf Nothing newRoot
 
   where
     chosenLeaf = chooseLeaf root rect
+    newNode = Node [] rect (hilbertValue rect)
 
-distributeEntriesToNodes :: [[HTree]] -> [Ptr HTree] -> HTree -> HTree
+updateNodes :: [[HTree]] -> [Ptr HTree] -> HTree -> HTree
+updateNodes [] [] root = root
+updateNodes (grp:grps) (sib:sibs) root = updateNodes grps sibs (setNode sib root grp)
 
-distributeEntriesToNodes [] [] root = root
-distributeEntriesToNodes grps sibs root
-  | otherwise = distributeEntriesToNodes (tail grps) (tail sibs) newRoot
+--todo rect->node
+handleOverflow :: Ptr HTree -> HTree -> HTree -> (Maybe HTree, HTree)
+handleOverflow node newEntry root
+  | allFull =
+      let updatedRoot      = updateNodes (tail entryGroups) siblingList root
+          splitNode        = Node (head entryGroups) (Rect 0 0 1 1) 1 in
+            (Just splitNode, updatedRoot)
+  | otherwise = (Nothing, updateNodes entryGroups siblingList root)
   where
-    newRoot = setNode (head sibs) root (head grps)
-
-handleOverflow :: Ptr HTree -> Rect -> HTree -> (Maybe HTree, HTree)
-handleOverflow node rect root
-  | trace ("handleOverflow: " ++ show allFull) False = undefined
-  | otherwise = 
-    if allFull
-      then let updatedRoot = distributeEntriesToNodes (tail entryGroups) (getSiblings node root) root
-               (newMBR, newLHV) = calcValues (Node (head entryGroups) undefined undefined)
-               splitNode   = Node (head entryGroups) newMBR newLHV in
-                 (Just splitNode, updatedRoot)
-      else let updatedRoot = distributeEntriesToNodes entryGroups (getSiblings node root) root in
-        (Nothing, updatedRoot)
-  where
+    --TODO ERROR/?????????????????
     siblingList = getSiblings node root
-    newEntry = Node [] rect (hilbertValue rect)
-    entries :: [HTree] = (concat $ (map _entries $ (map (deref root) siblingList))) ++ [newEntry]
-    allFull = all full (map (deref root) (getSiblings node root))
-    entryGroups :: [[HTree]] = groupsOf ((length siblingList) + (if allFull then 1 else 0)) entries
+    entries :: [HTree] = [newEntry] ++ (concat (map _entries (map (deref root) siblingList))) 
+    allFull = all full (map (deref root) siblingList)
+    numGroups = (length siblingList) + (if allFull then 1 else 0)
+    entryGroups :: [[HTree]] = numGroups `groupsOf` entries
 
---TODO - i dont use siblings (var) here.
+
 
 --createdNode => split
-adjustTree :: Ptr HTree -> Maybe [Ptr HTree] -> Maybe HTree -> HTree -> HTree
-adjustTree updatedNode siblings createdNode root
-  | trace ("adj" ++ (show updatedNode) ++ "\n" ++ (show root)) False = undefined
-  | otherwise = 
-      if isRoot updatedNode
-        then 
-          if isJust createdNode --split root! rejoin into one big root.
-            then let (newMBR, newLHV) = calcValues (Node [root, fromJust createdNode] undefined undefined) in
-                   Node [root, fromJust createdNode] newMBR newLHV
-            else updateMbrLhv updatedNode root
-        else let (pp, updatedRoot) = propNodeSplit
-                 updatedRoot2 = updateMbrLhv updatedNode updatedRoot in
-          
-          adjustTree (parent updatedNode) (Just $ getSiblings (parent updatedNode) updatedRoot2) pp updatedRoot2
+adjustTree :: Ptr HTree -> Maybe HTree -> HTree -> HTree
+adjustTree updatedNode createdNode root
+    | isRoot updatedNode =
+        case createdNode of
+          Just newNode -> Node [root, newNode] (Rect 0 0 1 1) 99
+            --let (newMBR, newLHV) = calcValues (Node [root, fromJust createdNode] undefined undefined) in
+          Nothing -> root --updateMbrLhv updatedNode root
+    | otherwise = 
+        let (pp, updatedRoot) = propNodeSplit in
+                 -- updatedRoot2 = updateMbrLhv updatedNode updatedRoot in
+                 -- TODO error here is that im not updating stuff
+          adjustTree (parent updatedNode) pp updatedRoot--2
 
   where
     -- better name might be maybePropNodeSplit...
@@ -178,24 +222,28 @@ adjustTree updatedNode siblings createdNode root
         case createdNode of
           Just newNode -> -- this is NN
             if full $ (deref root np)
-              then handleOverflow np (_rect newNode) root
+              then handleOverflow np newNode root
               else (Nothing, addToNode np root newNode)
-          Nothing ->
-            (Nothing, root)
+          Nothing -> (Nothing, root)
 
-    updateMbrLhv :: Ptr HTree -> HTree -> HTree
-    updateMbrLhv node root = 
-        update node root (\(Node entries rect lhv) -> (Node entries newMBR newLHV))
-      where
-        (newMBR, newLHV) = calcValues (deref root node)
+ensureChildren :: HTree -> HTree
+ensureChildren t@(Node entries _ _) = if (null entries) then (Node [t] (Rect 0 0 5 5) 99) else t
+
+checkCVValidity :: (Rect, Int) -> Bool
+checkCVValidity r =
+  case r of ((Rect a b c d), _) -> (a <= c) && (b <= d)
 
 main = do
-    print $ "Before"
-    print $ tree
-    print $ "Add 1"
-    print $ (insertRect tree (Rect 0 0 2 2))
-    print $ "Add 2"
-    print $ foldl insertRect tree [Rect 0 0 2 1, Rect 0 0 2 2, Rect 0 0 2 3, Rect 0 0 2 4, Rect 0 0 2 5, Rect 0 0 2 6, Rect 0 0 2 7]
+    --quickCheck( (\r -> checkCVValidity $ (calcValues (ensureChildren r))) :: HTree -> Bool)
+    --quickCheck( (\r -> let withChildren = ensureChildren r in
+                         --(length (getChildren (newPtr childLens) withChildren) > 0)) :: HTree -> Bool)
+
+    quickCheck( (\r1 r2 -> (insertRect (insertRect tree r1) r2) ==
+                           (insertRect (insertRect tree r2) r1)) :: Rect -> Rect -> Bool)
+
+
+    --getChildren :: Ptr HTree -> HTree -> [Ptr HTree]
+    print $ foldl insertRect tree (map (Rect 0 0 2) [1..100])
     --print $ insertRect (insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)) (Rect 0 0 3 3)
   where
     tree = Node [] (Rect 0 0 0 0) 0
