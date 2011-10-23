@@ -38,4 +38,7 @@ rectsIntersect r1@(Rect r1Left r1Top r1Right r1Bottom) r2@(Rect r2Left r2Top r2R
                r2Right  < r1Left   || 
                r2Top    > r1Bottom || 
                r2Bottom < r1Top    ))
-    else error "Rect coordinates out of order"
+    else 
+      if (not $ validRect r1) 
+        then (error $ "Rect coordinates " ++ (show r1) ++ " out of order")
+        else (error $ "Rect coordinates " ++ (show r2) ++ " out of order")
