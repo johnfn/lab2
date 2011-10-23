@@ -14,12 +14,6 @@ import Rect
 import Ptr
 
 {-
-updateMbrLhv :: Ptr HTree -> HTree -> HTree
-updateMbrLhv node uroot 
-  | otherwise = 
-      update node uroot (\(Node entries rect lhv) -> (Node entries newMBR newLHV))
-  where
-    (newMBR, newLHV) = calcValues (deref uroot node)
 -}
 
 data HTree = Node { _entries :: [HTree]
@@ -73,11 +67,11 @@ childLens n
                      (\child node -> node {_entries = (updateList (_entries node) child n)}) -- set
 
 
---TODO: Better is createNodeFrom that takes a list of HTree children.
-
 --TODO - there should be an idiom for this stuff, figure out if time (there wont be time)
-calcValues :: HTree -> (Rect, Int)
-calcValues (Node entries rect lhv) = (newMBR, newLHV)
+
+
+createNodeFrom :: [HTree] -> HTree
+createNodeFrom entries = Node entries newMBR newLHV
   where
     newMBR = Rect ((_left   . _rect) (minimumBy (comparing (_left   . _rect)) entries)) 
                   ((_top    . _rect) (minimumBy (comparing (_top    . _rect)) entries))
@@ -182,16 +176,14 @@ updateNodes :: [[HTree]] -> [Ptr HTree] -> HTree -> HTree
 updateNodes [] [] root = root
 updateNodes (grp:grps) (sib:sibs) root = updateNodes grps sibs (setNode sib root grp)
 
---todo rect->node
 handleOverflow :: Ptr HTree -> HTree -> HTree -> (Maybe HTree, HTree)
 handleOverflow node newEntry root
   | allFull =
       let updatedRoot      = updateNodes (tail entryGroups) siblingList root
-          splitNode        = Node (head entryGroups) (Rect 0 0 1 1) 1 in
+          splitNode        = createNodeFrom (head entryGroups) in
             (Just splitNode, updatedRoot)
   | otherwise = (Nothing, updateNodes entryGroups siblingList root)
   where
-    --TODO ERROR/?????????????????
     siblingList = getSiblings node root
     entries :: [HTree] = [newEntry] ++ (concat (map _entries (map (deref root) siblingList))) 
     allFull = all full (map (deref root) siblingList)
@@ -199,32 +191,36 @@ handleOverflow node newEntry root
     entryGroups :: [[HTree]] = numGroups `groupsOf` entries
 
 
-
---createdNode => split
 adjustTree :: Ptr HTree -> Maybe HTree -> HTree -> HTree
 adjustTree updatedNode createdNode root
     | isRoot updatedNode =
         case createdNode of
-          Just newNode -> Node [root, newNode] (Rect 0 0 1 1) 99
-            --let (newMBR, newLHV) = calcValues (Node [root, fromJust createdNode] undefined undefined) in
-          Nothing -> root --updateMbrLhv updatedNode root
+          Just newNode -> createNodeFrom [root, newNode]
+          Nothing -> updateMbrLhv updatedNode root
     | otherwise = 
-        let (pp, updatedRoot) = propNodeSplit in
-                 -- updatedRoot2 = updateMbrLhv updatedNode updatedRoot in
-                 -- TODO error here is that im not updating stuff
-          adjustTree (parent updatedNode) pp updatedRoot--2
+        let updatedRoot = updateMbrLhv updatedNode root
+            (pp, updatedRoot2) = propNodeSplit updatedRoot in
+          adjustTree (parent updatedNode) pp updatedRoot2
 
   where
     -- better name might be maybePropNodeSplit...
-    propNodeSplit :: (Maybe HTree, HTree)  
-    propNodeSplit = 
+    propNodeSplit :: HTree -> (Maybe HTree, HTree)  
+    propNodeSplit uroot = 
       let np = parent updatedNode in
         case createdNode of
           Just newNode -> -- this is NN
-            if full $ (deref root np)
-              then handleOverflow np newNode root
-              else (Nothing, addToNode np root newNode)
-          Nothing -> (Nothing, root)
+            if full $ (deref uroot np)
+              then handleOverflow np newNode uroot
+              else (Nothing, addToNode np uroot newNode)
+          Nothing -> (Nothing, uroot)
+
+    updateMbrLhv :: Ptr HTree -> HTree -> HTree
+    updateMbrLhv node uroot =
+        update node uroot (\(Node entries rect lhv) -> (Node entries newMBR newLHV))
+      where
+        (Node _ newMBR newLHV) = createNodeFrom (map (deref uroot) (getChildren node uroot))
+
+
 
 ensureChildren :: HTree -> HTree
 ensureChildren t@(Node entries _ _) = if (null entries) then (Node [t] (Rect 0 0 5 5) 99) else t
