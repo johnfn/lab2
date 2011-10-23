@@ -1,11 +1,12 @@
 {-# OPTIONS -Wall #-}
 
 import Data.List
+import Data.Bits
 import Data.List.Split
 import Data.Maybe
 import Data.Ord
 import Data.Lens.Common
-import Test.QuickCheck
+import Test.QuickCheck hiding ((.&.))
 import Control.Monad
 import Control.Category
 import Prelude hiding ((.))
@@ -111,12 +112,19 @@ groupsOf' list numGroups result
   where
     takeAmt = (length list) `div` numGroups
 
-hilbertValue :: Rect -> Int
-hilbertValue _ = 2
---hilbertValue (Rect left top right bottom) = get2DM (hilbertValues 10) x y
---  where
---    x = ((left + right) `div` 1)
---    y = ((top + bottom) `div` 1)
+
+hilbertValue :: Rect -> Int 
+hilbertValue (Rect left right top bottom) = 
+    hilbertValue' n ((left + right) `div` 2) ((top + bottom) `div` 2) (n `div` 2) 0
+  where
+    n = 16
+
+-- Written with help from http://en.wikipedia.org/wiki/Hilbert_curve
+hilbertValue' n x y s d =
+  if s == 0 then d else hilbertValue' n x y (s `div` 2) (s * s * ((3 * rx) `xor` ry))
+  where
+    rx = if (x .&. s) > 0 then 1 else 0
+    ry = if (y .&. s) > 0 then 1 else 0
 
 --add rect to leaf, returning new tree
 addToNode :: Ptr HTree -> HTree -> HTree -> HTree
