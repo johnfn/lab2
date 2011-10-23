@@ -1,15 +1,16 @@
 {-# OPTIONS -Wall #-}
 
-import Rect
+import Data.List
+import Data.List.Split
 import Data.Maybe
 import Data.Ord
-import Debug.Trace
 import Data.Lens.Common
 import Test.QuickCheck
 import Control.Monad
 import Control.Category
 import Prelude hiding ((.))
-import Data.List
+import System.Environment
+
 import Rect
 import Ptr
 
@@ -42,9 +43,10 @@ largestValue = 10000
 
 instance Arbitrary HTree where
   arbitrary = do
-    maxDepth <- choose (0, 0)
+    maxDepth <- choose (0, 8)
     t <- arbitraryTree maxDepth (Rect 0 0 largestValue largestValue) largestValue
     return t
+
 -- This is where you start to see Haskell's sex appeal
 showHTree indent (Node ch mbr lhv) =
   (concat $ replicate indent "  ") ++ "lhv: " ++ (show lhv) ++ " rect: " ++ (show mbr) ++ "\n" ++ (concat $ map (showHTree (indent + 2)) ch)
@@ -52,15 +54,10 @@ showHTree indent (Node ch mbr lhv) =
 instance Show HTree where
   show n = showHTree 0 n
 
-at list val = 
-  if val >= (length list)  || val < 0
-    then error $ ("AT FAIL AT " ++ show list ++ show val)
-    else list !! val
-
 -- lens for a single child of a Node
 childLens n 
   | otherwise = 
-    lens (\t -> (_entries t) `at` n) -- get
+    lens (\t -> (_entries t) !! n) -- get
          (\child node -> node {_entries = (updateList (_entries node) child n)}) -- set
 
 
@@ -179,10 +176,10 @@ handleOverflow node newEntry root
   | otherwise = (Nothing, updateNodes entryGroups siblingList root)
   where
     siblingList = getSiblings node root
-    entries :: [HTree] = [newEntry] ++ (concat (map _entries (map (deref root) siblingList))) 
+    entries = [newEntry] ++ (concat (map _entries (map (deref root) siblingList))) 
     allFull = all full (map (deref root) siblingList)
     numGroups = (length siblingList) + (if allFull then 1 else 0)
-    entryGroups :: [[HTree]] = numGroups `groupsOf` entries
+    entryGroups = numGroups `groupsOf` entries
 
 
 adjustTree :: Ptr HTree -> Maybe HTree -> HTree -> HTree
@@ -219,13 +216,33 @@ checkCVValidity :: (Rect, Int) -> Bool
 checkCVValidity r =
   case r of ((Rect a b c d), _) -> (a <= c) && (b <= d)
 
-main = do
+getFileOrFail :: IO String
+getFileOrFail = do
+  args <- getArgs
+  if length args == 0
+    then return (error "Was not provided with a file name to read. Exiting.")
+    else return (head args)
 
+toRect :: [Int] -> Rect
+toRect c = 
+  let xs = [c !! 0, c !! 2, c !! 4, c !! 6]
+      ys = [c !! 1, c !! 3, c !! 5, c !! 7] in
+    Rect (minimum xs) (minimum ys) (maximum xs) (maximum ys)
+    
+toRects :: [String] -> [Rect]
+toRects contents =
+  map (\str -> (toRect ((map read (splitOn "," str)) :: [Int]))) contents
+
+main = do
+    fileName <- getFileOrFail
+    contents <- fmap lines $ readFile fileName
+    let rects = toRects contents
+
+    let hTree = foldl insertRect tree rects
     --quickCheck( (\r -> checkCVValidity $ (calcValues (ensureChildren r))) :: HTree -> Bool)
     --quickCheck( (\r -> let withChildren = ensureChildren r in
                          --(length (getChildren (newPtr childLens) withChildren) > 0)) :: HTree -> Bool)
-     
-    print $ (search (Rect 0 99 1 99) big)
+    print $ (search (toRect [3458, 2482, 3458, 2456, 3570, 2456, 3570, 2482]) hTree)
 
     {-
     quickCheck( (\r1 r2 -> (_lhv $ insertRect (insertRect tree r1) r2) ==
@@ -239,10 +256,9 @@ main = do
                        (_rect $ foldl insertRect tree (reverse r))) :: [Rect] -> Bool)
                        -}
 
-
     --getChildren :: Ptr HTree -> HTree -> [Ptr HTree]
     --print $ insertRect (insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)) (Rect 0 0 3 3)
   where
     tree = Node [] (Rect 0 0 0 0) 100
-    big = foldl insertRect tree (map (\x -> Rect 0 0 1 x) [1..100])
+    --big = foldl insertRect tree (map (\x -> Rect 0 0 1 x) [1..100])
 
