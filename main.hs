@@ -13,9 +13,6 @@ import Data.List
 import Rect
 import Ptr
 
-{-
--}
-
 data HTree = Node { _entries :: [HTree]
                   , _rect    :: Rect
                   , _lhv     :: Int
@@ -64,12 +61,10 @@ at list val =
 childLens n 
   | otherwise = 
     lens (\t -> (_entries t) `at` n) -- get
-                     (\child node -> node {_entries = (updateList (_entries node) child n)}) -- set
+         (\child node -> node {_entries = (updateList (_entries node) child n)}) -- set
 
 
 --TODO - there should be an idiom for this stuff, figure out if time (there wont be time)
-
-
 createNodeFrom :: [HTree] -> HTree
 createNodeFrom [] = (Node [] (Rect 0 0 0 0) 0)
 createNodeFrom entries = Node entries newMBR newLHV
@@ -132,12 +127,10 @@ setNode :: Ptr HTree -> HTree -> [HTree] -> HTree
 setNode leaf root newContents 
   | otherwise = update leaf root (\node -> createNodeFrom newContents)
 
-{-
-search :: HTree -> [Rect]
---TODO - no more leaf/node
-search (Leaf entities) rect = filter (rectIntersect rect) entities
-search (Node leaves) rect = concat (map search leaves)
--}
+search :: Rect -> HTree -> [Rect]
+search val n@(Node children rect _)
+  | isLeaf n = filter (rectsIntersect val) (map _rect children)
+  | otherwise = concat (map (search val) children)
 
 -- It's a leaf if the only children it has are empty but for their Rect.
 
@@ -232,7 +225,7 @@ main = do
     --quickCheck( (\r -> let withChildren = ensureChildren r in
                          --(length (getChildren (newPtr childLens) withChildren) > 0)) :: HTree -> Bool)
      
-    print $ foldl insertRect tree (map (Rect 0 0 2) [1..100])
+    print $ (search (Rect 0 99 1 99) big)
 
     {-
     quickCheck( (\r1 r2 -> (_lhv $ insertRect (insertRect tree r1) r2) ==
@@ -251,3 +244,5 @@ main = do
     --print $ insertRect (insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)) (Rect 0 0 3 3)
   where
     tree = Node [] (Rect 0 0 0 0) 100
+    big = foldl insertRect tree (map (\x -> Rect 0 0 1 x) [1..100])
+
