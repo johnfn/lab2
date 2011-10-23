@@ -6,13 +6,16 @@ Grant Mathews
 
 ## How to run
 
-`cabal install split` if you don't have it.
+`cabal install split` 
+`cabal install timeit` 
 
-## Notes
+And then...
 
-The implementation creates a proper Hilbert Tree with insertRect. It has the following deviations from the spec at this point:
+`ghc -o a.out main.hs && ./a.out rects.txt`
 
-* Need to do timing.
+## What's not done
+
+* Tests should be moved into own file.
 
 ## TODO
 
