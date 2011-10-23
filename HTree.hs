@@ -1,17 +1,19 @@
 {-# OPTIONS -Wall #-}
 
+module HTree where
+
 import Data.List
 import Data.Bits
 import Data.List.Split
 import Data.Maybe
 import Data.Ord
 import Data.Lens.Common
-import Test.QuickCheck hiding ((.&.))
 import Control.Monad
 import Control.Category
 import Prelude hiding ((.))
 import System.Environment
 import System.TimeIt
+import Test.QuickCheck hiding ((.&.))
 
 import Rect
 import Ptr
@@ -91,6 +93,7 @@ getSiblings ptr root
   | isRoot ptr = [ptr] -- need to special case since you can't get parent of root
   | otherwise = getChildren (parent ptr) root
 
+-- is this node full? Here we set the leaf constant to 3.
 full :: HTree -> Bool
 full (Node entries _ _) = (length entries) >= 3
 
@@ -112,7 +115,6 @@ groupsOf' list numGroups result
   | otherwise = groupsOf' (drop takeAmt list) (numGroups - 1) (result ++ [take takeAmt list])
   where
     takeAmt = (length list) `div` numGroups
-
 
 hilbertValue :: Rect -> Int 
 hilbertValue (Rect left right top bottom) = 
@@ -222,13 +224,6 @@ adjustTree updatedNode createdNode root
     updateMbrLhv node uroot =
         update node uroot (\(Node entries rect lhv) -> createNodeFrom entries)
 
-ensureChildren :: HTree -> HTree
-ensureChildren t@(Node entries _ _) = if (null entries) then (Node [t] (Rect 0 0 5 5) 99) else t
-
-checkCVValidity :: (Rect, Int) -> Bool
-checkCVValidity r =
-  case r of ((Rect a b c d), _) -> (a <= c) && (b <= d)
-
 getFileOrFail :: IO String
 getFileOrFail = do
   args <- getArgs
@@ -268,30 +263,10 @@ main = do
 
     let hTree = foldl insertRect tree rects
 
-    --quickCheck( (\r -> checkCVValidity $ (calcValues (ensureChildren r))) :: HTree -> Bool)
-    --quickCheck( (\r -> let withChildren = ensureChildren r in
-                         --(length (getChildren (newPtr childLens) withChildren) > 0)) :: HTree -> Bool)
     --print $ hTree
 
     processInput hTree
 
-    --print $ (search (toRect [3458, 2482, 3458, 2456, 3570, 2456, 3570, 2482]) hTree)
-
-    {-
-    quickCheck( (\r1 r2 -> (_lhv $ insertRect (insertRect tree r1) r2) ==
-                           (_lhv $ insertRect (insertRect tree r2) r1)) :: Rect -> Rect -> Bool)
-    -}
-
-    --quickCheck ( (\r -> (_rect $ createNodeFrom r) == (_rect $ createNodeFrom (reverse r))) :: [HTree] -> Bool)
-
-    {-
-    quickCheck( (\r -> (_rect $ foldl insertRect tree r) ==
-                       (_rect $ foldl insertRect tree (reverse r))) :: [Rect] -> Bool)
-                       -}
-
-    --getChildren :: Ptr HTree -> HTree -> [Ptr HTree]
-    --print $ insertRect (insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)) (Rect 0 0 3 3)
   where
     tree = Node [] (Rect 0 0 0 0) 100
-    big = foldl insertRect tree (map (\x -> Rect 0 0 1 x) [1..1000])
 
