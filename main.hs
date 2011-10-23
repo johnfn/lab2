@@ -13,6 +13,7 @@ import System.Environment
 
 import Rect
 import Ptr
+import Matrix
 
 data HTree = Node { _entries :: [HTree]
                   , _rect    :: Rect
@@ -110,9 +111,12 @@ groupsOf' list numGroups result
   where
     takeAmt = (length list) `div` numGroups
 
---TODO
 hilbertValue :: Rect -> Int
-hilbertValue r = 5
+hilbertValue _ = 2
+--hilbertValue (Rect left top right bottom) = get2DM (hilbertValues 10) x y
+--  where
+--    x = ((left + right) `div` 1)
+--    y = ((top + bottom) `div` 1)
 
 --add rect to leaf, returning new tree
 addToNode :: Ptr HTree -> HTree -> HTree -> HTree
@@ -233,16 +237,34 @@ toRects :: [String] -> [Rect]
 toRects contents =
   map (\str -> (toRect ((map read (splitOn "," str)) :: [Int]))) contents
 
+countEntries :: HTree -> Int
+countEntries t
+  | isLeaf t = length (_entries t)
+  | otherwise = foldl1 (+) (map countEntries (_entries t))
+
+
+processInput :: HTree -> IO ()
+processInput hTree = do
+  line <- getLine
+  putStrLn $ show (search (toRect ((map read (splitOn "," line)) :: [Int])) hTree )
+
+  processInput hTree
+
 main = do
     fileName <- getFileOrFail
     contents <- fmap lines $ readFile fileName
     let rects = toRects contents
 
     let hTree = foldl insertRect tree rects
+
     --quickCheck( (\r -> checkCVValidity $ (calcValues (ensureChildren r))) :: HTree -> Bool)
     --quickCheck( (\r -> let withChildren = ensureChildren r in
                          --(length (getChildren (newPtr childLens) withChildren) > 0)) :: HTree -> Bool)
-    print $ (search (toRect [3458, 2482, 3458, 2456, 3570, 2456, 3570, 2482]) hTree)
+    --print $ hTree
+
+    processInput hTree
+
+    --print $ (search (toRect [3458, 2482, 3458, 2456, 3570, 2456, 3570, 2482]) hTree)
 
     {-
     quickCheck( (\r1 r2 -> (_lhv $ insertRect (insertRect tree r1) r2) ==
@@ -260,5 +282,5 @@ main = do
     --print $ insertRect (insertRect (insertRect tree (Rect 0 0 2 2)) (Rect 0 0 5 5)) (Rect 0 0 3 3)
   where
     tree = Node [] (Rect 0 0 0 0) 100
-    --big = foldl insertRect tree (map (\x -> Rect 0 0 1 x) [1..100])
+    big = foldl insertRect tree (map (\x -> Rect 0 0 1 x) [1..1000])
 
