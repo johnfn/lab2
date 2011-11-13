@@ -1,6 +1,6 @@
 {-# OPTIONS -Wall #-}
 
-module HTree where
+module Main where
 
 import Data.List
 import Data.Bits
@@ -17,7 +17,6 @@ import Test.QuickCheck hiding ((.&.))
 
 import Rect
 import Ptr
-import Matrix
 
 data HTree = Node { _entries :: [HTree]
                   , _rect    :: Rect
@@ -252,7 +251,13 @@ limit = 4
 processInput :: HTree -> IO ()
 processInput hTree = do
   line <- getLine
-  timeIt $ putStrLn $ show (take limit $ search (toRect ((map read (splitOn "," line)) :: [Int])) hTree )
+  let rects = search (toRect ((map read (splitOn "," line)) :: [Int])) hTree 
+  let total = length rects
+  
+  timeIt $ seq rects (putStrLn "Finished searching.")
+
+  putStrLn $ show (take limit $ rects)
+  putStrLn ("Total rects found: " ++ (show $ length rects))
 
   processInput hTree
 
